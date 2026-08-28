@@ -75,7 +75,9 @@ export function LocationDetails({
       <dl className="mt-4 space-y-1.5 text-xs">
         <Row label="Latitude" value={formatCoord(selection.latitude)} mono />
         <Row label="Longitude" value={formatCoord(selection.longitude)} mono />
-        {selection.place?.type ? <Row label="Type" value={selection.place.type} /> : null}
+        {selection.place?.type && selection.place.type !== "yes" ? (
+          <Row label="Type" value={selection.place.type} />
+        ) : null}
         {selection.place?.category ? (
           <Row label="Category" value={selection.place.category} />
         ) : null}
