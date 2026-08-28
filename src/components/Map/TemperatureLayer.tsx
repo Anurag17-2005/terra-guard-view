@@ -2,8 +2,10 @@ import { useMemo } from "react";
 import { GeoJSON } from "react-leaflet";
 import type { Feature, FeatureCollection } from "geojson";
 import type { Layer, PathOptions } from "leaflet";
+import { DomEvent } from "leaflet";
 import { readTemperature } from "@/services/fortyguard/heatmap";
 import { getTemperatureColor } from "@/lib/temperatureColor";
+import { PANES } from "./MapPanes";
 
 /**
  * Renders the FortyGuard heatmap GeoJSON polygon tiles directly — no
@@ -55,6 +57,8 @@ export function TemperatureLayer({
           target.setStyle?.(styleFn(feature));
         },
         click: (event) => {
+          // Keep the map click handler from overwriting the tile selection.
+          DomEvent.stopPropagation(event as unknown as Event);
           const { lat, lng } = (event as unknown as { latlng: { lat: number; lng: number } }).latlng;
           onSelectTile({ temperature: value, latitude: lat, longitude: lng });
         },
@@ -65,6 +69,7 @@ export function TemperatureLayer({
 
   return (
     <GeoJSON
+      pane={PANES.data}
       key={`heatmap-${data.features?.length ?? 0}-${range.min}-${range.max}`}
       data={data}
       style={styleFn}
