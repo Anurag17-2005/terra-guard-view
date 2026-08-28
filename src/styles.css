@@ -59,7 +59,17 @@
   --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-ring: var(--sidebar-ring);
+  --color-panel: var(--panel);
+  --color-panel-foreground: var(--panel-foreground);
+  --color-panel-muted: var(--panel-muted);
+  --color-panel-border: var(--panel-border);
+  --color-brand: var(--brand);
+  --color-brand-foreground: var(--brand-foreground);
+  --font-sans: "Inter Tight", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, monospace;
+  --shadow-panel: var(--shadow-panel-value);
 }
+
 
 :root {
   --radius: 0.625rem;
@@ -141,4 +151,76 @@
     background-color: var(--color-background);
     color: var(--color-foreground);
   }
+}
+
+/* ---- FortyGuard design tokens ---------------------------------------- */
+:root {
+  --radius: 0.5rem;
+  --primary: oklch(0.55 0.14 205);
+  --primary-foreground: oklch(0.99 0 0);
+  --ring: oklch(0.55 0.14 205);
+
+  /* Floating glass panels that sit over the map */
+  --panel: oklch(0.19 0.02 250 / 0.92);
+  --panel-foreground: oklch(0.97 0.005 250);
+  --panel-muted: oklch(0.72 0.015 250);
+  --panel-border: oklch(1 0 0 / 0.12);
+  --brand: oklch(0.72 0.16 62);
+  --brand-foreground: oklch(0.2 0.03 60);
+  --shadow-panel-value: 0 8px 30px oklch(0.15 0.03 250 / 0.35);
+
+  /* Thermal scale (cool -> hot) used by the temperature layer + legend */
+  --temp-1: oklch(0.62 0.13 250);
+  --temp-2: oklch(0.72 0.12 200);
+  --temp-3: oklch(0.85 0.13 110);
+  --temp-4: oklch(0.82 0.16 75);
+  --temp-5: oklch(0.68 0.2 40);
+  --temp-6: oklch(0.55 0.22 25);
+}
+
+@utility fg-panel {
+  background-color: var(--panel);
+  color: var(--panel-foreground);
+  border: 1px solid var(--panel-border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-panel-value);
+  backdrop-filter: blur(12px);
+}
+
+/* Leaflet chrome restyled to match the panels */
+.leaflet-container {
+  font-family: var(--font-sans);
+  background: oklch(0.9 0.01 250);
+}
+.leaflet-control-zoom a,
+.leaflet-bar a {
+  background: var(--panel) !important;
+  color: var(--panel-foreground) !important;
+  border-color: var(--panel-border) !important;
+}
+.leaflet-bar {
+  border: 1px solid var(--panel-border) !important;
+  box-shadow: var(--shadow-panel-value) !important;
+}
+.leaflet-control-attribution {
+  background: oklch(1 0 0 / 0.75) !important;
+  font-size: 10px;
+}
+.leaflet-popup-content-wrapper,
+.leaflet-popup-tip {
+  background: var(--panel);
+  color: var(--panel-foreground);
+  box-shadow: var(--shadow-panel-value);
+}
+.leaflet-popup-content {
+  margin: 0.75rem 0.9rem;
+}
+.fg-tooltip {
+  background: var(--panel) !important;
+  color: var(--panel-foreground) !important;
+  border: 1px solid var(--panel-border) !important;
+  box-shadow: var(--shadow-panel-value);
+}
+.fg-tooltip::before {
+  display: none;
 }
