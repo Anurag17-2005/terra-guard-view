@@ -217,7 +217,7 @@ export default function FortyGuardApp() {
 
       {/* Right: location details */}
       {selection ? (
-        <div className="absolute bottom-4 right-4 z-[1000] md:bottom-auto md:top-44">
+        <div className="absolute bottom-4 right-4 z-[1000] md:bottom-auto md:top-56">
           <LocationDetails
             selection={selection}
             env={env}

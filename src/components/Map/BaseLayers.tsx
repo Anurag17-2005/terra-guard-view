@@ -46,15 +46,8 @@ export function BaseLayers({ baseMap }: { baseMap: BaseMapType }) {
         attribution={MAP_CONFIG.street.attribution}
         maxZoom={MAP_CONFIG.street.maxZoom}
       />
-      {/* Labels stay on top of any FortyGuard data layer */}
-      <TileLayer
-        key="street-labels"
-        pane={PANES.labels}
-        url={MAP_CONFIG.referenceOverlay.url}
-        attribution={MAP_CONFIG.referenceOverlay.attribution}
-        maxZoom={MAP_CONFIG.referenceOverlay.maxZoom}
-        opacity={0.85}
-      />
+      {/* OSM tiles already carry roads and labels, so no extra label overlay
+          here — it would double every place name. */}
     </>
   );
 }
