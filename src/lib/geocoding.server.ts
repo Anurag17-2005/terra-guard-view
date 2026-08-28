@@ -9,8 +9,8 @@ export interface NormalizedPlace {
   displayName: string;
   latitude: number;
   longitude: number;
-  type?: string;
-  category?: string;
+  type?: string | undefined;
+  category?: string | undefined;
 }
 
 interface NominatimItem {
