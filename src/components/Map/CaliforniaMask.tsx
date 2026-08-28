@@ -2,6 +2,7 @@ import { useMemo } from "react";
 import { Polygon } from "react-leaflet";
 import { californiaGeometry } from "@/data/california";
 import { outerRingsToLatLng, type LatLng } from "@/lib/geo";
+import { PANES } from "./MapPanes";
 
 /** World rectangle used as the mask's outer ring. */
 const WORLD: LatLng[] = [
@@ -23,6 +24,7 @@ export function CaliforniaMask() {
 
   return (
     <Polygon
+      pane={PANES.mask}
       positions={rings}
       interactive={false}
       pathOptions={{
