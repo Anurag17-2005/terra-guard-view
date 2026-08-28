@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Loader2, MapPin, Search } from "lucide-react";
 import { geocodingService, parseCoordinates, type Place } from "@/services/geocoding";
 
@@ -16,7 +16,7 @@ export function SearchPanel({
   const [open, setOpen] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
 
-  const coords = parseCoordinates(query);
+  const coords = useMemo(() => parseCoordinates(query), [query]);
 
   useEffect(() => {
     if (coords || query.trim().length < 2) {

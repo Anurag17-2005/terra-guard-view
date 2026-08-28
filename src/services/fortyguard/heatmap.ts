@@ -29,6 +29,8 @@ export const fortyguardHeatmap = {
  * inventing one. Returns null when nothing matches.
  */
 const TEMPERATURE_KEYS = [
+  // Verified against a real /v1/heatmap (tcm) response
+  "average_temperature",
   "temperature",
   "temp",
   "tcm",
@@ -48,8 +50,9 @@ export function readTemperature(feature: Feature): number | null {
       return Number(raw);
     }
   }
-  // Fall back to the first finite numeric property, if any.
-  for (const raw of Object.values(props)) {
+  // Fall back to the first finite numeric property that is not an identifier.
+  for (const [key, raw] of Object.entries(props)) {
+    if (/id$|_id/i.test(key)) continue;
     if (typeof raw === "number" && Number.isFinite(raw)) return raw;
   }
   return null;
