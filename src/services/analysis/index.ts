@@ -73,8 +73,8 @@ export async function analyzeHeatmap(
           : {}),
       },
       {
-        signal,
-        onTick: (status) => onProgress?.("processing", status),
+        ...(signal ? { signal } : {}),
+        onTick: (status: string) => onProgress?.("processing", status),
       },
     );
 
