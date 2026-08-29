@@ -68,11 +68,21 @@ async function call<T>(path: string, init: RequestInit): Promise<T> {
   return body as T;
 }
 
+export interface HeatmapDateTime {
+  filter_type: number;
+  start_date: string;
+  end_date?: string;
+  start_time?: string;
+  end_time?: string;
+}
+
 export interface HeatmapRequestBody {
   polygon_aoi: unknown;
-  date_time: { start_date: string; start_time?: string; filter_type: number };
+  date_time: HeatmapDateTime;
   granularity: number;
   analytic_type: string;
+  threshold?: number;
+  direction?: string;
 }
 
 export function submitHeatmap(body: HeatmapRequestBody) {
@@ -96,14 +106,55 @@ export function getActivityStatus(activityId: string) {
   }>(`/status/${encodeURIComponent(activityId)}`, { method: "GET" });
 }
 
-/** ISO date bounds documented by FortyGuard: 2019-01-01 .. now + 12h. */
-export function validateDateTime(startDate: string, startTime: string): void {
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(startDate)) throw new FortyGuardError("Date must be YYYY-MM-DD", 400);
-  if (!/^\d{2}:\d{2}$/.test(startTime)) throw new FortyGuardError("Time must be HH:MM", 400);
-  const requested = new Date(`${startDate}T${startTime}:00Z`).getTime();
-  if (!Number.isFinite(requested)) throw new FortyGuardError("Invalid date/time", 400);
+const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+const TIME_RE = /^\d{2}:\d{2}$/;
+
+/**
+ * Server-side guard for the documented heatmap temporal contract:
+ * filter_type 1 (hour), 2 (same-day range), 3 (full day), 4 (date range),
+ * dates from 2019-01-01 up to now + 12h.
+ */
+export function validateHeatmapDateTime(input: HeatmapDateTime): HeatmapDateTime {
+  const filterType = Number(input?.filter_type);
+  if (![1, 2, 3, 4].includes(filterType)) {
+    throw new FortyGuardError("filter_type must be 1, 2, 3 or 4", 400);
+  }
+  const startDate = String(input?.start_date ?? "");
+  if (!DATE_RE.test(startDate)) throw new FortyGuardError("Date must be YYYY-MM-DD", 400);
+
+  const result: HeatmapDateTime = { filter_type: filterType, start_date: startDate };
+
+  if (filterType === 1 || filterType === 2) {
+    const startTime = String(input?.start_time ?? "");
+    if (!TIME_RE.test(startTime)) throw new FortyGuardError("Time must be HH:MM", 400);
+    result.start_time = startTime;
+  }
+  if (filterType === 2) {
+    const endTime = String(input?.end_time ?? "");
+    if (!TIME_RE.test(endTime)) throw new FortyGuardError("End time must be HH:MM", 400);
+    if (endTime <= result.start_time!) {
+      throw new FortyGuardError("End time must be after start time on the same day", 400);
+    }
+    result.end_time = endTime;
+  }
+  if (filterType === 4) {
+    const endDate = String(input?.end_date ?? "");
+    if (!DATE_RE.test(endDate)) throw new FortyGuardError("End date must be YYYY-MM-DD", 400);
+    if (Date.parse(`${endDate}T00:00:00Z`) < Date.parse(`${startDate}T00:00:00Z`)) {
+      throw new FortyGuardError("End date must be after the start date", 400);
+    }
+    result.end_date = endDate;
+  }
+
   const min = Date.parse("2019-01-01T00:00:00Z");
   const max = Date.now() + 12 * 60 * 60 * 1000;
-  if (requested < min) throw new FortyGuardError("Date must be on or after 2019-01-01", 400);
-  if (requested > max) throw new FortyGuardError("Date must be within 12 hours of the current time", 400);
+  const earliest = Date.parse(`${startDate}T${result.start_time ?? "00:00"}:00Z`);
+  const latestDate = result.end_date ?? startDate;
+  const latest = Date.parse(`${latestDate}T${result.end_time ?? "00:00"}:00Z`);
+  if (!Number.isFinite(earliest)) throw new FortyGuardError("Invalid date/time", 400);
+  if (earliest < min) throw new FortyGuardError("Date must be on or after 2019-01-01", 400);
+  if (latest > max) {
+    throw new FortyGuardError("Date must be within 12 hours of the current time", 400);
+  }
+  return result;
 }
