@@ -4,38 +4,51 @@ import {
   getActivityStatus,
   submitEnvParams,
   submitHeatmap,
-  validateDateTime,
+  validateHeatmapDateTime,
+  type HeatmapDateTime,
   type HeatmapRequestBody,
 } from "./fortyguard.server";
 
 export interface HeatmapSubmitInput {
   polygonAoi: unknown;
-  startDate: string;
-  startTime: string;
+  dateTime: HeatmapDateTime;
   granularity: number;
   analyticType?: string;
+  threshold?: number | undefined;
+  direction?: string | undefined;
 }
 
 export const submitHeatmapFn = createServerFn({ method: "POST" })
   .inputValidator((data: HeatmapSubmitInput) => {
     if (!data?.polygonAoi) throw new Error("An area of interest is required");
-    validateDateTime(String(data.startDate), String(data.startTime));
+    const dateTime = validateHeatmapDateTime(data.dateTime);
     const granularity = Number(data.granularity);
     if (![60, 80, 100].includes(granularity)) throw new Error("Granularity must be 60, 80 or 100");
+    const analyticType = data.analyticType ?? "tcm";
+    const needsThreshold = analyticType === "exceedance" || analyticType === "persistence";
+    if (needsThreshold && !Number.isFinite(Number(data.threshold))) {
+      throw new Error("A numeric threshold is required for this analysis");
+    }
+    if (needsThreshold && !["above", "below"].includes(String(data.direction))) {
+      throw new Error("Direction must be 'above' or 'below'");
+    }
     return {
       polygonAoi: data.polygonAoi,
-      startDate: String(data.startDate),
-      startTime: String(data.startTime),
+      dateTime,
       granularity,
-      analyticType: data.analyticType ?? "tcm",
+      analyticType,
+      threshold: needsThreshold ? Number(data.threshold) : undefined,
+      direction: needsThreshold ? String(data.direction) : undefined,
     };
   })
   .handler(async ({ data }) => {
     const body: HeatmapRequestBody = {
       polygon_aoi: data.polygonAoi,
-      date_time: { start_date: data.startDate, start_time: data.startTime, filter_type: 1 },
+      date_time: data.dateTime,
       granularity: data.granularity,
       analytic_type: data.analyticType,
+      ...(data.threshold !== undefined ? { threshold: data.threshold } : {}),
+      ...(data.direction !== undefined ? { direction: data.direction } : {}),
     };
     try {
       const res = await submitHeatmap(body);
@@ -85,7 +98,11 @@ export const submitEnvParamsFn = createServerFn({ method: "POST" })
         throw new Error("Longitude must be between -180 and 180");
       }
       if (!Number.isFinite(Number(data?.temperature))) throw new Error("Temperature is required");
-      validateDateTime(String(data.startDate), String(data.startTime));
+      validateHeatmapDateTime({
+        filter_type: 1,
+        start_date: String(data.startDate),
+        start_time: String(data.startTime),
+      });
       return {
         latitude,
         longitude,

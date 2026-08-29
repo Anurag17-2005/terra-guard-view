@@ -8,6 +8,7 @@ import { CaliforniaMask } from "./CaliforniaMask";
 import { CaliforniaBoundary } from "./CaliforniaBoundary";
 import { TemperatureLayer } from "./TemperatureLayer";
 import { SelectedMarker } from "./SelectedMarker";
+import { DrawTools, type DrawMode, type DrawnShape } from "./DrawTools";
 import {
   BoundsReporter,
   FitCalifornia,
@@ -23,6 +24,10 @@ export interface MapViewProps {
   flyTarget: FlyTarget | null;
   heatmap: FeatureCollection | null;
   heatmapRange: { min: number; max: number } | null;
+  drawMode: DrawMode;
+  drawnShape: DrawnShape | null;
+  onDrawComplete: (shape: DrawnShape) => void;
+  onDraftVertices?: (count: number) => void;
   onMapClick: (latitude: number, longitude: number) => void;
   onBoundsChange: (bounds: { south: number; west: number; north: number; east: number }) => void;
   onTileSelect: (payload: {
@@ -33,7 +38,8 @@ export interface MapViewProps {
 }
 
 export function MapView(props: MapViewProps) {
-  const { baseMap, layers, selected, flyTarget, heatmap, heatmapRange } = props;
+  const { baseMap, layers, selected, flyTarget, heatmap, heatmapRange, drawMode, drawnShape } =
+    props;
 
   return (
     <MapContainer
@@ -56,6 +62,13 @@ export function MapView(props: MapViewProps) {
       ) : null}
       {layers.boundary ? <CaliforniaBoundary /> : null}
 
+      <DrawTools
+        mode={drawMode}
+        shape={drawnShape}
+        onComplete={props.onDrawComplete}
+        {...(props.onDraftVertices ? { onVertexCountChange: props.onDraftVertices } : {})}
+      />
+
       {selected ? (
         <SelectedMarker
           latitude={selected.latitude}
@@ -64,7 +77,7 @@ export function MapView(props: MapViewProps) {
         />
       ) : null}
 
-      <MapClickHandler onClick={props.onMapClick} />
+      {drawMode === "none" ? <MapClickHandler onClick={props.onMapClick} /> : null}
       <FlyTo target={flyTarget} />
       <BoundsReporter onChange={props.onBoundsChange} />
     </MapContainer>
