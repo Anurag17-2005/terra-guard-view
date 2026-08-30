@@ -1,25 +1,19 @@
-import { useCallback, useMemo, useRef, useState } from "react";
-import type { FeatureCollection } from "geojson";
+import { useCallback, useMemo, useState } from "react";
 import type { BaseMapType } from "@/config/mapConfig";
 import { MapView } from "@/components/Map/MapView";
 import type { FlyTarget } from "@/components/Map/MapInteractions";
+import type { DrawMode, DrawnShape } from "@/components/Map/DrawTools";
 import { MapControls, type LayerState } from "@/components/MapControls";
 import { SearchPanel } from "@/components/SearchPanel";
+import { DrawToolbar } from "@/components/DrawToolbar";
+import { AreaSummary } from "@/components/AreaSummary";
 import { TemperatureLegend } from "@/components/TemperatureLegend";
 import { AnalysisPanel, type AnalysisSettings } from "@/components/AnalysisPanel";
 import { LocationDetails, type EnvState, type SelectionState } from "@/components/LocationDetails";
 import { geocodingService, type Place } from "@/services/geocoding";
-import { fortyguardHeatmap, temperatureRange } from "@/services/fortyguard/heatmap";
+import { temperatureRange } from "@/services/fortyguard/heatmap";
 import { fortyguardEnvironmental } from "@/services/fortyguard/environmental";
-import type { AnalysisPhase } from "@/services/fortyguard/types";
-import { boundsToAoi } from "@/lib/geo";
-
-interface Bounds {
-  south: number;
-  west: number;
-  north: number;
-  east: number;
-}
+import { analyzeHeatmap, calculatePolygonArea, type AnalysisResult } from "@/services/analysis";
 
 function todayUtc(): string {
   return new Date().toISOString().slice(0, 10);
@@ -35,22 +29,27 @@ export default function FortyGuardApp() {
 
   const [selection, setSelection] = useState<SelectionState | null>(null);
   const [flyTarget, setFlyTarget] = useState<FlyTarget | null>(null);
-  const boundsRef = useRef<Bounds | null>(null);
 
-  const [heatmap, setHeatmap] = useState<FeatureCollection | null>(null);
-  const [phase, setPhase] = useState<AnalysisPhase>("idle");
-  const [statusText, setStatusText] = useState<string | null>(null);
-  const [analysisError, setAnalysisError] = useState<string | null>(null);
-  const [activityId, setActivityId] = useState<string | null>(null);
+  const [drawMode, setDrawMode] = useState<DrawMode>("none");
+  const [shape, setShape] = useState<DrawnShape | null>(null);
+  const [draftVertices, setDraftVertices] = useState(0);
+
+  const [result, setResult] = useState<AnalysisResult | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [progress, setProgress] = useState<string | null>(null);
+
   const [settings, setSettings] = useState<AnalysisSettings>({
-    date: todayUtc(),
-    time: "14:00",
+    timeRange: { mode: "single_hour", startDate: todayUtc(), startTime: "14:00" },
+    analysis: { type: "temperature" },
     granularity: 100,
   });
 
   const [env, setEnv] = useState<EnvState>({ status: "idle", data: null, error: null });
 
+  const heatmap = result?.status === "completed" ? result.geojson : null;
+  const activityId = result?.status === "completed" ? result.activityId : null;
   const range = useMemo(() => (heatmap ? temperatureRange(heatmap) : null), [heatmap]);
+  const area = useMemo(() => (shape ? calculatePolygonArea(shape.polygon) : null), [shape]);
 
   const resolvePlace = useCallback(async (latitude: number, longitude: number) => {
     try {
@@ -100,50 +99,42 @@ export default function FortyGuardApp() {
     setFlyTarget({ latitude, longitude, zoom: 13, key: Date.now() });
   };
 
+  /** API calls happen only here — an explicit user action on a drawn area. */
   const runAnalysis = async () => {
-    const bounds = boundsRef.current;
-    if (!bounds) return;
-    setPhase("submitting");
-    setAnalysisError(null);
-    setStatusText(null);
-
-    try {
-      const result = await fortyguardHeatmap.run(
-        {
-          polygonAoi: boundsToAoi(bounds.south, bounds.west, bounds.north, bounds.east),
-          startDate: settings.date,
-          startTime: settings.time,
-          granularity: settings.granularity,
-          analyticType: "tcm",
-        },
-        {
-          onTick: (status) => {
-            setPhase("processing");
-            setStatusText(`FortyGuard status: ${status}`);
-          },
-        },
-      );
-      setActivityId(result.activityId);
-      setHeatmap(result.mapData);
+    if (!shape) return;
+    setBusy(true);
+    setProgress("Validating");
+    const outcome = await analyzeHeatmap(
+      {
+        polygon: shape.polygon,
+        timeRange: settings.timeRange,
+        analysis: settings.analysis,
+        granularity: settings.granularity,
+      },
+      {
+        onProgress: (stage, detail) =>
+          setProgress(detail ?? stage.charAt(0).toUpperCase() + stage.slice(1)),
+      },
+    );
+    setResult(outcome);
+    setBusy(false);
+    setProgress(null);
+    if (outcome.status === "completed") {
       setLayers((current) => ({ ...current, temperature: true }));
-      setPhase(result.mapData ? "completed" : "failed");
-      if (!result.mapData) setAnalysisError("FortyGuard returned no map data for this request.");
-    } catch (error) {
-      setPhase("failed");
-      setAnalysisError((error as Error).message);
     }
   };
 
   const loadEnvironmental = async () => {
     if (!selection || selection.temperature === null) return;
+    const { timeRange } = settings;
     setEnv({ status: "loading", data: null, error: null });
     try {
       const data = await fortyguardEnvironmental.run({
         latitude: selection.latitude,
         longitude: selection.longitude,
         temperature: selection.temperature,
-        startDate: settings.date,
-        startTime: settings.time,
+        startDate: timeRange.startDate,
+        startTime: timeRange.startTime ?? "12:00",
       });
       setEnv({ status: "ready", data, error: null });
     } catch (error) {
@@ -170,17 +161,23 @@ export default function FortyGuardApp() {
         flyTarget={flyTarget}
         heatmap={heatmap}
         heatmapRange={range}
-        onMapClick={(latitude, longitude) => selectPoint(latitude, longitude)}
-        onBoundsChange={(bounds) => {
-          boundsRef.current = bounds;
+        drawMode={drawMode}
+        drawnShape={shape}
+        onDrawComplete={(next) => {
+          setShape(next);
+          setDrawMode("none");
+          setDraftVertices(0);
         }}
+        onDraftVertices={setDraftVertices}
+        onMapClick={(latitude, longitude) => selectPoint(latitude, longitude)}
+        onBoundsChange={() => {}}
         onTileSelect={({ temperature, latitude, longitude }) =>
           selectPoint(latitude, longitude, { temperature, activityId })
         }
       />
 
-      {/* Top-left: brand + search */}
-      <div className="pointer-events-none absolute left-4 top-4 z-[1000] flex flex-col gap-2">
+      {/* Top-left: brand, search, drawing, analysis */}
+      <div className="pointer-events-none absolute left-4 top-4 z-[1000] flex max-h-[calc(100dvh-2rem)] flex-col gap-2 overflow-y-auto">
         <div className="fg-panel pointer-events-auto flex items-center gap-2 px-3 py-2">
           <span className="size-2.5 rounded-full bg-brand" />
           <span className="text-sm font-semibold tracking-tight">FortyGuard</span>
@@ -192,13 +189,31 @@ export default function FortyGuardApp() {
           <SearchPanel onSelectPlace={handleSelectPlace} onSelectCoordinates={handleCoordinates} />
         </div>
         <div className="pointer-events-auto">
+          <DrawToolbar
+            mode={drawMode}
+            onModeChange={setDrawMode}
+            hasShape={Boolean(shape)}
+            onClear={() => {
+              setShape(null);
+              setResult(null);
+              setDraftVertices(0);
+            }}
+            draftVertices={draftVertices}
+          />
+        </div>
+        {shape ? (
+          <div className="pointer-events-auto">
+            <AreaSummary shape={shape} area={area} />
+          </div>
+        ) : null}
+        <div className="pointer-events-auto">
           <AnalysisPanel
             settings={settings}
             onSettingsChange={setSettings}
-            phase={phase}
-            statusText={statusText}
-            error={analysisError}
-            tileCount={heatmap?.features?.length ?? null}
+            busy={busy}
+            progress={progress}
+            result={result}
+            hasShape={Boolean(shape)}
             onRun={() => void runAnalysis()}
           />
         </div>
